@@ -1,0 +1,370 @@
+import { JSONSchemaType } from 'ajv';
+import { Field, InternalFieldName } from 'react-hook-form';
+
+interface Data {
+  username: string;
+  password: string;
+  deepObject: { data: string; twoLayersDeep: { name: string } };
+}
+
+export const schema: JSONSchemaType<Data> = {
+  type: 'object',
+  properties: {
+    username: {
+      type: 'string',
+      minLength: 3,
+    },
+    password: {
+      type: 'string',
+      pattern: '.*[A-Z].*',
+      errorMessage: {
+        pattern: 'One uppercase character',
+      },
+    },
+    deepObject: {
+      type: 'object',
+      properties: {
+        data: { type: 'string' },
+        twoLayersDeep: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          additionalProperties: false,
+          required: ['name'],
+        },
+      },
+      required: ['data', 'twoLayersDeep'],
+    },
+  },
+  required: ['username', 'password', 'deepObject'],
+  additionalProperties: false,
+};
+
+export const validData: Data = {
+  username: 'jsun969',
+  password: 'validPassword',
+  deepObject: {
+    twoLayersDeep: {
+      name: 'deeper',
+    },
+    data: 'data',
+  },
+};
+
+export const invalidData = {
+  username: '__',
+  password: 'invalid-password',
+  deepObject: {
+    data: 233,
+    twoLayersDeep: { name: 123 },
+  },
+};
+
+export const invalidDataWithUndefined = {
+  username: 'jsun969',
+  password: undefined,
+  deepObject: {
+    twoLayersDeep: {
+      name: 'deeper',
+    },
+    data: undefined,
+  },
+};
+
+export const fields: Record<InternalFieldName, Field['_f']> = {
+  username: {
+    ref: { name: 'username' },
+    name: 'username',
+  },
+  password: {
+    ref: { name: 'password' },
+    name: 'password',
+  },
+  email: {
+    ref: { name: 'email' },
+    name: 'email',
+  },
+  birthday: {
+    ref: { name: 'birthday' },
+    name: 'birthday',
+  },
+};
+import { render, screen } from '@testing-library/react';
+import user from '@testing-library/user-event';
+import { JSONSchemaType } from 'ajv';
+import React from 'react';
+import { useForm } from 'react-hook-form';
+import { ajvResolver } from '..';
+
+const USERNAME_REQUIRED_MESSAGE = 'username field is required';
+const PASSWORD_REQUIRED_MESSAGE = 'password field is required';
+
+type FormData = { username: string; password: string };
+
+const schema: JSONSchemaType<FormData> = {
+  type: 'object',
+  properties: {
+    username: {
+      type: 'string',
+      minLength: 1,
+      errorMessage: { minLength: USERNAME_REQUIRED_MESSAGE },
+    },
+    password: {
+      type: 'string',
+      minLength: 1,
+      errorMessage: { minLength: PASSWORD_REQUIRED_MESSAGE },
+    },
+  },
+  required: ['username', 'password'],
+  additionalProperties: false,
+};
+
+interface Props {
+  onSubmit: (data: FormData) => void;
+}
+
+function TestComponent({ onSubmit }: Props) {
+  const { register, handleSubmit } = useForm<FormData>({
+    resolver: ajvResolver(schema),
+    shouldUseNativeValidation: true,
+  });
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <input {...register('username')} placeholder="username" />
+
+      <input {...register('password')} placeholder="password" />
+
+      <button type="submit">submit</button>
+    </form>
+  );
+}
+
+test("form's native validation with Ajv", async () => {
+  const handleSubmit = vi.fn();
+  render(<TestComponent onSubmit={handleSubmit} />);
+
+  // username
+  let usernameField = screen.getByPlaceholderText(
+    /username/i,
+  ) as HTMLInputElement;
+  expect(usernameField.validity.valid).toBe(true);
+  expect(usernameField.validationMessage).toBe('');
+
+  // password
+  let passwordField = screen.getByPlaceholderText(
+    /password/i,
+  ) as HTMLInputElement;
+  expect(passwordField.validity.valid).toBe(true);
+  expect(passwordField.validationMessage).toBe('');
+
+  await user.click(screen.getByText(/submit/i));
+
+  // username
+  usernameField = screen.getByPlaceholderText(/username/i) as HTMLInputElement;
+  expect(usernameField.validity.valid).toBe(false);
+  expect(usernameField.validationMessage).toBe(USERNAME_REQUIRED_MESSAGE);
+
+  // password
+  passwordField = screen.getByPlaceholderText(/password/i) as HTMLInputElement;
+  expect(passwordField.validity.valid).toBe(false);
+  expect(passwordField.validationMessage).toBe(PASSWORD_REQUIRED_MESSAGE);
+
+  await user.type(screen.getByPlaceholderText(/username/i), 'joe');
+  await user.type(screen.getByPlaceholderText(/password/i), 'password');
+
+  // username
+  usernameField = screen.getByPlaceholderText(/username/i) as HTMLInputElement;
+  expect(usernameField.validity.valid).toBe(true);
+  expect(usernameField.validationMessage).toBe('');
+
+  // password
+  passwordField = screen.getByPlaceholderText(/password/i) as HTMLInputElement;
+  expect(passwordField.validity.valid).toBe(true);
+  expect(passwordField.validationMessage).toBe('');
+});
+import { render, screen } from '@testing-library/react';
+import user from '@testing-library/user-event';
+import { JSONSchemaType } from 'ajv';
+import React from 'react';
+import { useForm } from 'react-hook-form';
+import { ajvResolver } from '..';
+
+type FormData = { username: string; password: string };
+
+const schema: JSONSchemaType<FormData> = {
+  type: 'object',
+  properties: {
+    username: {
+      type: 'string',
+      minLength: 1,
+      errorMessage: { minLength: 'username field is required' },
+    },
+    password: {
+      type: 'string',
+      minLength: 1,
+      errorMessage: { minLength: 'password field is required' },
+    },
+  },
+  required: ['username', 'password'],
+  additionalProperties: false,
+};
+
+interface Props {
+  onSubmit: (data: FormData) => void;
+}
+
+function TestComponent({ onSubmit }: Props) {
+  const {
+    register,
+    formState: { errors },
+    handleSubmit,
+  } = useForm<FormData>({
+    resolver: ajvResolver(schema), // Useful to check TypeScript regressions
+  });
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <input {...register('username')} />
+      {errors.username && <span role="alert">{errors.username.message}</span>}
+
+      <input {...register('password')} />
+      {errors.password && <span role="alert">{errors.password.message}</span>}
+
+      <button type="submit">submit</button>
+    </form>
+  );
+}
+
+test("form's validation with Ajv and TypeScript's integration", async () => {
+  const handleSubmit = vi.fn();
+  render(<TestComponent onSubmit={handleSubmit} />);
+
+  expect(screen.queryAllByRole('alert')).toHaveLength(0);
+
+  await user.click(screen.getByText(/submit/i));
+
+  expect(screen.getByText(/username field is required/i)).toBeInTheDocument();
+  expect(screen.getByText(/password field is required/i)).toBeInTheDocument();
+  expect(handleSubmit).not.toHaveBeenCalled();
+});
+import { toNestErrors, validateFieldsNatively } from '@hookform/resolvers';
+import Ajv, { DefinedError } from 'ajv';
+import ajvErrors from 'ajv-errors';
+import { FieldError, appendErrors } from 'react-hook-form';
+import { Resolver } from './types';
+
+const parseErrorSchema = (
+  ajvErrors: DefinedError[],
+  validateAllFieldCriteria: boolean,
+) => {
+  // Ajv will return empty instancePath when require error
+  ajvErrors.forEach((error) => {
+    if (error.keyword === 'required') {
+      error.instancePath += '/' + error.params.missingProperty;
+    }
+  });
+
+  return ajvErrors.reduce<Record<string, FieldError>>((previous, error) => {
+    // `/deepObject/data` -> `deepObject.data`
+    const path = error.instancePath.substring(1).replace(/\//g, '.');
+
+    if (!previous[path]) {
+      previous[path] = {
+        message: error.message,
+        type: error.keyword,
+      };
+    }
+
+    if (validateAllFieldCriteria) {
+      const types = previous[path].types;
+      const messages = types && types[error.keyword];
+
+      previous[path] = appendErrors(
+        path,
+        validateAllFieldCriteria,
+        previous,
+        error.keyword,
+        messages
+          ? ([] as string[]).concat(messages as string[], error.message || '')
+          : error.message,
+      ) as FieldError;
+    }
+
+    return previous;
+  }, {});
+};
+
+export const ajvResolver: Resolver =
+  (schema, schemaOptions, resolverOptions = {}) =>
+  async (values, _, options) => {
+    const ajv = new Ajv(
+      Object.assign(
+        {},
+        {
+          allErrors: true,
+          validateSchema: true,
+        },
+        schemaOptions,
+      ),
+    );
+
+    ajvErrors(ajv);
+
+    const validate = ajv.compile(
+      Object.assign(
+        { $async: resolverOptions && resolverOptions.mode === 'async' },
+        schema,
+      ),
+    );
+
+    const valid = validate(values);
+
+    options.shouldUseNativeValidation && validateFieldsNatively({}, options);
+
+    return valid
+      ? { values, errors: {} }
+      : {
+          values: {},
+          errors: toNestErrors(
+            parseErrorSchema(
+              validate.errors as DefinedError[],
+              !options.shouldUseNativeValidation &&
+                options.criteriaMode === 'all',
+            ),
+            options,
+          ),
+        };
+  };
+export * from './ajv';
+export * from './types';
+import * as Ajv from 'ajv';
+import { FieldValues, ResolverOptions, ResolverResult } from 'react-hook-form';
+
+export type Resolver = <T>(
+  schema: Ajv.JSONSchemaType<T>,
+  schemaOptions?: Ajv.Options,
+  factoryOptions?: { mode?: 'async' | 'sync' },
+) => <TFieldValues extends FieldValues, TContext>(
+  values: TFieldValues,
+  context: TContext | undefined,
+  options: ResolverOptions<TFieldValues>,
+) => Promise<ResolverResult<TFieldValues>>;
+{
+  "name": "@hookform/resolvers/ajv",
+  "amdName": "hookformResolversAjv",
+  "version": "1.0.0",
+  "private": true,
+  "description": "React Hook Form validation resolver: ajv",
+  "main": "dist/ajv.js",
+  "module": "dist/ajv.module.js",
+  "umd:main": "dist/ajv.umd.js",
+  "source": "src/index.ts",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "peerDependencies": {
+    "react-hook-form": "^7.0.0",
+    "@hookform/resolvers": "^2.0.0",
+    "ajv": "^8.12.0",
+    "ajv-errors": "^3.0.0"
+  }
+}
